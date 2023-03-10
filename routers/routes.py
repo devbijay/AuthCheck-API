@@ -1,28 +1,27 @@
 from functools import wraps
 
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Header, Security, Depends, HTTPException, status
+from fastapi.security import APIKeyHeader
 from dotenv import load_dotenv
 from services.database import db
+
 load_dotenv()
 router = APIRouter()
 
+auth_scheme = APIKeyHeader(name="X_API_KEY")
 
-def auth_required(f):
-    @wraps(f)
-    def decorated(*args,X_API_KEY: str = Header(None), **kwargs):
-        if X_API_KEY is None:
-            return {"message": "Api key is missing in the header"}, 401
 
-        if user := db.users.find_one({"api": X_API_KEY}):
-            kwargs['username'] = user.get("username")
-            return f(*args, **kwargs)
+def auth_required(api_key: str = Depends(auth_scheme)):
+    if api_key is None:
+        return {"message": "Api key is missing in the header"}, 401
 
-        return {"message": "Invalid API key"}, 401
+    if db.users.find_one({"api": api_key}):
+        return True
 
-    return decorated
+    return {"message": "Invalid API key"}, 401
 
 
 @router.get("/hello")
 @auth_required
-async def read_item(item_id: int):
-    return {"item_id": item_id, "source": "route2"}
+async def read_item(dependencies=[Depends(auth_required)]):
+    return {"item_id": "item_id", "source": "route2"}
