@@ -28,6 +28,7 @@ async def get_code_status(code: str = Query(description="Code Id or Qr Id", min_
     if result := db.codes.find_one({"owner_name": user, "$or": [{"code": code}, {"_id": code}]},
                                    {"_id": 0, "status": 1}):
         return CodeStatus(code=code, status="used" if result.get("status") else "not_used")
+
     return CodeStatus(code=code, status="Invalid Code")
 
 
