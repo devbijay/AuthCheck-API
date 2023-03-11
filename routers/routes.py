@@ -1,27 +1,56 @@
-from functools import wraps
-
-from fastapi import APIRouter, Header, Security, Depends, HTTPException, status
+from typing import Optional
+from fastapi import APIRouter, Header, Security, Depends, HTTPException, status, Query
 from fastapi.security import APIKeyHeader
 from dotenv import load_dotenv
+
+from models.models import CodeStatus, CodeDetails, BuyerData
 from services.database import db
 
 load_dotenv()
 router = APIRouter()
 
-auth_scheme = APIKeyHeader(name="X_API_KEY")
+api_key_header = APIKeyHeader(name="X-API-Key")
 
 
-def auth_required(api_key: str = Depends(auth_scheme)):
-    if api_key is None:
-        return {"message": "Api key is missing in the header"}, 401
+async def auth_required(api_key: Optional[str] = Depends(api_key_header)):
+    if not api_key:
+        raise HTTPException(status_code=401, detail="API key is missing in header")
 
-    if db.users.find_one({"api": api_key}):
-        return True
+    if user := db.users.find_one({"api": api_key}, {"username": 1}):
+        return user.get("username")
 
-    return {"message": "Invalid API key"}, 401
+    raise HTTPException(status_code=401, detail="Invalid API key")
 
 
 @router.get("/hello")
-@auth_required
-async def read_item(dependencies=[Depends(auth_required)]):
-    return {"item_id": "item_id", "source": "route2"}
+async def read_item(user: str = Depends(auth_required)):
+    return {"message": "hello World"}
+
+
+@router.get("/status", response_model=CodeStatus)
+async def get_code_status(code: str = Query(description="Code Id or Qr Id", min_length=8),
+                          user: str = Depends(auth_required)):
+    if result := db.codes.find_one({"owner_name": user, "$or": [{"code": code}, {"_id": code}]},
+                                   {"_id": 0, "status": 1}):
+        return CodeStatus(code=code, status="used" if result.get("status") else "not_used")
+    return CodeStatus(code=code, status="Invalid Code")
+
+
+@router.get("/details", response_model=CodeDetails)
+async def get_code_details(code: str = Query(description="Code Id or Qr Id", min_length=8),
+                           user: str = Depends(auth_required)):
+    if result := db.codes.find_one({"owner_name": user, "$or": [{"code": code}, {"_id": code}]}):
+        buyer_data = BuyerData(name=result.get("buyer_name"),
+                               phone=result.get("buyer_phone"),
+                               email=result.get("buyer_email"),
+                               purchase_source=result.get("purchase_source"),
+                               verified_on_utc=str(result.get("verified_on"))
+                               )
+
+        return CodeDetails(code=code,
+                           qr_id=result.get("_id"),
+                           status="used" if result.get("status") else "not_used",
+                           buyer_data=buyer_data
+                           )
+
+    return CodeStatus(code=code, status="Invalid Code")
