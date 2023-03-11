@@ -21,3 +21,11 @@ class CodeDetails(BaseModel):
     qr_id: str
     status: str
     buyer_data: Optional[BuyerData]
+
+
+class UserDetails(BaseModel):
+    username: str
+    name: Optional[str]
+    email: Optional[str]
+    credit_count: Optional[int]
+    subdomain: Optional[str]
