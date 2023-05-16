@@ -1,8 +1,10 @@
+import os
 from typing import Optional
 from fastapi import APIRouter, Header, Security, Depends, HTTPException, status, Query
 from fastapi.security import APIKeyHeader
 from dotenv import load_dotenv
 
+from dbmodels import UnverifiedCodes
 from models.models import CodeStatus, CodeDetails, BuyerData, UserDetails
 from services.database import db
 
@@ -16,26 +18,23 @@ async def auth_required(api_key: Optional[str] = Depends(api_key_header)):
     if not api_key:
         raise HTTPException(status_code=401, detail="API key is missing in header")
 
-    if user := db.users.find_one({"api": api_key}, {"username": 1}):
-        return user.get("username")
+    import redis
+    r = redis.Redis(host=os.getenv('REDIS_HOST'), password=os.getenv('REDIS_PASS'), port=int(os.getenv('REDIS_PORT')))
+    if user := r.get(api_key).decode('utf-8'):
+        return user
 
     raise HTTPException(status_code=401, detail="Invalid API key")
 
 
-@router.get("/status", response_model=CodeStatus, tags=["Code Management"])
-async def get_code_status(code: str = Query(description="Code Id or Qr Id", min_length=8),
-                          user: str = Depends(auth_required)):
-    if result := db.codes.find_one({"owner_name": user, "$or": [{"code": code}, {"_id": code}]},
-                                   {"_id": 0, "status": 1}):
-        return CodeStatus(code=code, status="used" if result.get("status") else "not_used")
-
-    return CodeStatus(code=code, status="Invalid Code")
+# Write code to connect to a redis instance
 
 
 @router.post("/status", response_model=CodeDetails, tags=["Code Management"])
 async def get_code_details(code: str = Query(description="Code Id or Qr Id", min_length=8),
                            user: str = Depends(auth_required)):
-    if result := db.codes.find_one({"owner_name": user, "$or": [{"code": code}, {"_id": code}]}):
+    filter_type = {"id": code, "user": user} if len(code) >= 10 else {"user": user, "code": code}
+    print(filter_type)
+    if result := db.query(UnverifiedCodes).filter_by(**filter_type).first():
         buyer_data = BuyerData(name=result.get("buyer_name"),
                                phone=result.get("buyer_phone"),
                                email=result.get("buyer_email"),

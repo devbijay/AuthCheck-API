@@ -1,3 +1,7 @@
 fastapi
-pymongo
 python-dotenv
+redis[hiredis]
+sqlalchemy
+ulid
+mysqlclient
+pymysql
