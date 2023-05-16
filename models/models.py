@@ -8,10 +8,14 @@ class CodeStatus(BaseModel):
     status: str
 
 
+class InvalidCode(CodeStatus):
+    pass
+
 class BuyerData(BaseModel):
     name: Optional[str]
     phone: Optional[str]
     email: Optional[str]
+    buyer_city: Optional[str]
     purchase_source: Optional[str]
     verified_on_utc: Optional[str]
 
